@@ -50,17 +50,16 @@ DOMAIN=deanslist domain
 
 ```
 api_key_map = {
-    "BayviewMS":"XXXXXXXXXXXXXX",
-    "SFBay":"XXXXXXXXXXXXXX",
-    "BridgeES":"XXXXXXXXXXXXXX",
-    "Heritage":"XXXXXXXXXXXXXX",
-    "SFCP":"XXXXXXXXXXXXXX",
-    "Valiant":"XXXXXXXXXXXXXX",
-    "Excelencia":"XXXXXXXXXXXXXX",
-    "King":"XXXXXXXXXXXXXX",
-    "Summit":"XXXXXXXXXXXXXX",
-    "BridgeMS":"XXXXXXXXXXXXXX",
-    "BayviewES":"XXXXXXXXXXXXXX",
+    "BayviewES": "",
+    "BayviewMS": "",
+    "BridgeES": "",
+    "BridgeMS": "",
+    "Excelencia": "",
+    "Heartwood": "",
+    "Heritage": "",
+    "King": "",
+    "SFBay": "",
+    "SFCP": "",
 }
 ```
 
