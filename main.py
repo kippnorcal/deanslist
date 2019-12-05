@@ -79,7 +79,7 @@ def main():
             all_penalties = all_penalties.append(penalties, sort=False)
 
         sql.insert_into("DeansList_zdev_Raw", all_raw, if_exists="replace")
-        logging.info(f"Inserted {len(raw)} records into DeansList_zdev_Raw.")
+        logging.info(f"Inserted {len(all_raw)} records into DeansList_zdev_Raw.")
         sql.insert_into("DeansList_zdev_Actions", all_actions, if_exists="replace")
         logging.info(
             f"Inserted {len(all_actions)} records into DeansList_zdev_Actions."
