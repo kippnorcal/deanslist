@@ -4,7 +4,6 @@ import traceback
 
 import pandas as pd
 from pandas.io.json import json_normalize
-import requests
 from sqlsorcery import MSSQL
 
 from api import API
