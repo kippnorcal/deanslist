@@ -8,7 +8,6 @@ import requests
 from sqlsorcery import MSSQL
 
 from api import API
-from datamap import api_key_map
 from mailer import Mailer
 
 
@@ -34,11 +33,19 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def get_raw_incidents_data(incidents, school):
+def get_schools_and_keys(sql):
+    """Retrieve schools and API keys from the data warehouse."""
+    df = sql.query(f"SELECT * FROM custom.DeansList_APIConnection")
+    df = df[df["Active"] == True]
+    school_key_map = dict(zip(df["SchoolName"], df["APIKey"]))
+    return school_key_map
+
+
+def get_raw_incidents_data(incidents, api_key):
     """Get the raw data and add additional columns."""
     df = json_normalize(incidents["data"])
     df.columns = df.columns.str.replace(".", "_")
-    df["SchoolAPIKey"] = api_key_map.get(school)  # TODO use DB table instead
+    df["SchoolAPIKey"] = api_key
     df = df.astype({"Actions": str, "Penalties": str})
     logging.info(f"Retrieved {len(df)} Incident records.")
     return df
@@ -58,18 +65,20 @@ def get_nested_column_data(incidents, column):
 def main():
     try:
         mailer = Mailer()
-        schools = SCHOOLS if SCHOOLS else api_key_map.keys()
         sql = MSSQL()
+        school_key_map = get_schools_and_keys(sql)
+        if SCHOOLS:
+            school_key_map = {school: school_key_map[school] for school in SCHOOLS}
 
         all_raw = pd.DataFrame()
         all_actions = pd.DataFrame()
         all_penalties = pd.DataFrame()
 
-        for school in schools:
+        for school, api_key in school_key_map.items():
             logging.info(f"Getting data for {school}.")
-            incidents = API(school).get("incidents")
+            incidents = API(api_key).get("incidents")
 
-            raw = get_raw_incidents_data(incidents, school)
+            raw = get_raw_incidents_data(incidents, api_key)
             all_raw = all_raw.append(raw, sort=False)
 
             actions = get_nested_column_data(incidents, "Actions")
