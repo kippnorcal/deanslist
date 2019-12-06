@@ -46,25 +46,11 @@ SLACK_EMAIL=
 DOMAIN=deanslist domain
 ```
 
-5. Create datamap.py file with API keys
-
-```
-api_key_map = {
-    "BayviewES": "",
-    "BayviewMS": "",
-    "BridgeES": "",
-    "BridgeMS": "",
-    "Excelencia": "",
-    "Heartwood": "",
-    "Heritage": "",
-    "King": "",
-    "SFBay": "",
-    "SFCP": "",
-}
-```
+5. Create DeansList_APIConnection database table.
+Refer to sql/DeansList_APIConnection.sql.
 
 
-5. Build Docker Image
+6. Build Docker Image
 
 ```
 $ docker build -t deanslist .
@@ -74,4 +60,11 @@ $ docker build -t deanslist .
 
 ```
 $ docker run --rm -it deanslist
+```
+
+### For development or troubleshooting
+Run the job for only certain schools (one or many). School names must match APIKeys table.
+
+```
+$ docker run --rm -it deanslist -s "KIPP Bayview Academy" "KIPP Bridge Academy (Upper)"
 ```
