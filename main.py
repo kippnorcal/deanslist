@@ -12,6 +12,7 @@ from datamap import api_key_map
 from mailer import Mailer
 
 
+# This argparse is currently only useful for testing since the job does a truncate and reload.
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-s",
@@ -37,8 +38,7 @@ def get_raw_incidents_data(incidents, school):
     """Get the raw data and add additional columns."""
     df = json_normalize(incidents["data"])
     df.columns = df.columns.str.replace(".", "_")
-    df["SPACE"] = " "
-    df["SchoolAPIKey"] = api_key_map.get(school)
+    df["SchoolAPIKey"] = api_key_map.get(school)  # TODO use DB table instead
     df = df.astype({"Actions": str, "Penalties": str})
     logging.info(f"Retrieved {len(df)} Incident records.")
     return df
@@ -78,16 +78,12 @@ def main():
             penalties = get_nested_column_data(incidents, "Penalties")
             all_penalties = all_penalties.append(penalties, sort=False)
 
-        sql.insert_into("DeansList_zdev_Raw", all_raw, if_exists="replace")
-        logging.info(f"Inserted {len(all_raw)} records into DeansList_zdev_Raw.")
-        sql.insert_into("DeansList_zdev_Actions", all_actions, if_exists="replace")
-        logging.info(
-            f"Inserted {len(all_actions)} records into DeansList_zdev_Actions."
-        )
-        sql.insert_into("DeansList_zdev_Penalties", all_penalties, if_exists="replace")
-        logging.info(
-            f"Inserted {len(all_penalties)} records into DeansList_zdev_Penalties."
-        )
+        sql.insert_into("DeansList_Raw", all_raw, if_exists="replace")
+        logging.info(f"Inserted {len(all_raw)} records into DeansList_Raw.")
+        sql.insert_into("DeansList_Actions", all_actions, if_exists="replace")
+        logging.info(f"Inserted {len(all_actions)} records into DeansList_Actions.")
+        sql.insert_into("DeansList_Penalties", all_penalties, if_exists="replace")
+        logging.info(f"Inserted {len(all_penalties)} records into DeansList_Penalties.")
 
         mailer.notify()
     except Exception as e:
