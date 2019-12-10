@@ -7,6 +7,7 @@ from pandas.io.json import json_normalize
 from sqlsorcery import MSSQL
 
 from api import API
+from data_config import incident_fields
 from mailer import Mailer
 
 
@@ -44,10 +45,51 @@ def get_raw_incidents_data(incidents, api_key):
     """Get the raw data and add additional columns."""
     df = json_normalize(incidents["data"])
     df.columns = df.columns.str.replace(".", "_")
+    df = df[incident_fields]
     df["SchoolAPIKey"] = api_key
     df = df.astype({"Actions": str, "Penalties": str})
     logging.info(f"Retrieved {len(df)} Incident records.")
     return df
+
+
+def delete_current_incidents(sql, api_key):
+    table = sql.table("DeansList_Raw")
+    d = table.delete().where(table.c.SchoolAPIKey == api_key)
+    sql.engine.execute(d)
+
+
+def insert_new_incidents(sql, incidents, api_key):
+    """Insert records into the Raw Incidents table."""
+    df = get_raw_incidents_data(incidents, api_key)
+    sql.insert_into("DeansList_Raw", df, if_exists="append")
+    count = len(df)
+    logging.info(f"Inserted {count} records into DeansList_Raw.")
+    return count
+
+
+def delete_current_records(sql, api_key, table_name, incident_column):
+    """Delete records for the given table (Actions or Penalties) that have a corresponding incident in the Raw table."""
+    incident_ids = sql.query(
+        f"""SELECT DISTINCT t.{incident_column}
+        FROM custom.{table_name} t
+        LEFT JOIN custom.DeansList_Raw r
+            ON r.IncidentID = t.{incident_column}
+        WHERE r.SchoolAPIKey='{api_key}'"""
+    )
+    incident_ids = incident_ids[incident_column].tolist()
+    table = sql.table(table_name)
+    for incident_id in incident_ids:
+        d = table.delete().where(table.c[incident_column] == incident_id)
+        sql.engine.execute(d)
+
+
+def insert_new_records(sql, incidents, record_type):
+    """Insert records into the table by the record_type (Actions or Penalties)."""
+    df = get_nested_column_data(incidents, record_type)
+    sql.insert_into(f"DeansList_{record_type}", df, if_exists="append")
+    count = len(df)
+    logging.info(f"Inserted {count} records into DeansList_{record_type}.")
+    return count
 
 
 def get_nested_column_data(incidents, column):
@@ -69,29 +111,29 @@ def main():
         if SCHOOLS:
             school_key_map = {school: school_key_map[school] for school in SCHOOLS}
 
-        all_raw = pd.DataFrame()
-        all_actions = pd.DataFrame()
-        all_penalties = pd.DataFrame()
+        total_incidents = 0
+        total_actions = 0
+        total_penalties = 0
 
         for school, api_key in school_key_map.items():
             logging.info(f"Getting data for {school}.")
             incidents = API(api_key).get("incidents")
 
-            raw = get_raw_incidents_data(incidents, api_key)
-            all_raw = all_raw.append(raw, sort=False)
+            delete_current_incidents(sql, api_key)
+            count_incidents = insert_new_incidents(sql, incidents, api_key)
+            total_incidents += count_incidents
 
-            actions = get_nested_column_data(incidents, "Actions")
-            all_actions = all_actions.append(actions, sort=False)
+            delete_current_records(sql, api_key, "DeansList_Actions", "SourceID")
+            count_actions = insert_new_records(sql, incidents, "Actions")
+            total_actions += count_actions
 
-            penalties = get_nested_column_data(incidents, "Penalties")
-            all_penalties = all_penalties.append(penalties, sort=False)
+            delete_current_records(sql, api_key, "DeansList_Penalties", "IncidentID")
+            count_penalties = insert_new_records(sql, incidents, "Penalties")
+            total_penalties += count_penalties
 
-        sql.insert_into("DeansList_Raw", all_raw, if_exists="replace")
-        logging.info(f"Inserted {len(all_raw)} records into DeansList_Raw.")
-        sql.insert_into("DeansList_Actions", all_actions, if_exists="replace")
-        logging.info(f"Inserted {len(all_actions)} records into DeansList_Actions.")
-        sql.insert_into("DeansList_Penalties", all_penalties, if_exists="replace")
-        logging.info(f"Inserted {len(all_penalties)} records into DeansList_Penalties.")
+        logging.info(f"Updated {total_incidents} total records in DeansList_Raw.")
+        logging.info(f"Updated {total_actions} total records in DeansList_Actions.")
+        logging.info(f"Updated {total_penalties} total records in DeansList_Penalties.")
 
         mailer.notify()
     except Exception as e:
