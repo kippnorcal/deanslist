@@ -39,6 +39,8 @@ def get_schools_and_keys(sql):
     df = sql.query(f"SELECT * FROM custom.DeansList_APIConnection")
     df = df[df["Active"] == True]
     school_key_map = dict(zip(df["SchoolName"], df["APIKey"]))
+    if SCHOOLS:
+        school_key_map = {school: school_key_map[school] for school in SCHOOLS}
     return school_key_map
 
 
@@ -138,8 +140,6 @@ def main():
         mailer = Mailer()
         sql = MSSQL()
         school_key_map = get_schools_and_keys(sql)
-        if SCHOOLS:
-            school_key_map = {school: school_key_map[school] for school in SCHOOLS}
 
         total_incidents = 0
         total_actions = 0
