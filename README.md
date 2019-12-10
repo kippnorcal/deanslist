@@ -66,5 +66,5 @@ $ docker run --rm -it deanslist
 Run the job for only certain schools (one or many). School names must match APIKeys table.
 
 ```
-$ docker run --rm -it deanslist -s "KIPP Bayview Academy" "KIPP Bridge Academy (Upper)"
+$ docker run --rm -it deanslist --schools "KIPP Bayview Academy" "KIPP Bridge Academy (Upper)"
 ```

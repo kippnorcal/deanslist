@@ -14,8 +14,8 @@ from mailer import Mailer
 # This argparse is currently only useful for testing since the job does a truncate and reload.
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "-s",
-    help="Run for the specified schools. List separated by spaces (eg. -s BayviewMS King)",
+    "--schools",
+    help='Run for the specified schools. List separated by spaces (eg. --schools "KIPP Bayview Academy" "KIPP Bridge Academy (Upper)")',
     dest="schools",
     nargs="+",
 )
