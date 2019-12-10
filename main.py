@@ -1,5 +1,6 @@
 import argparse
 import logging
+import sys
 import traceback
 
 import pandas as pd
@@ -29,6 +30,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d %I:%M:%S%p",
 )
+logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -138,7 +140,8 @@ def main():
         mailer.notify()
     except Exception as e:
         stack_trace = traceback.format_exc()
-        mailer.notify(success=False, error_message=stack_trace)
+        logging.error(stack_trace)
+        mailer.notify(success=False)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ class Mailer:
         if self.success:
             return f"The Deanslist Connector job ran successfully.\n{self.logs}"
         else:
-            return f"The Deanslist Connector job encountered an error:\n{self.logs}\n{self.error_message}"
+            return f"The Deanslist Connector job encountered an error:\n{self.logs}"
 
     def _message(self):
         msg = MIMEText(self._body_text())
@@ -33,10 +33,9 @@ class Mailer:
         with open(filename) as f:
             return f.read()
 
-    def notify(self, success=True, error_message=None):
+    def notify(self, success=True):
         self.success = success
         self.logs = self._read_logs("app.log")
-        self.error_message = error_message
         with self.server as s:
             s.login(self.user, self.password)
             msg = self._message()
