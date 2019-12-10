@@ -8,7 +8,6 @@ from pandas.io.json import json_normalize
 from sqlsorcery import MSSQL
 
 from api import API
-from data_config import incident_fields
 from mailer import Mailer
 
 
@@ -45,6 +44,35 @@ def get_schools_and_keys(sql):
 
 def get_raw_incidents_data(incidents, api_key):
     """Get the raw data and add additional columns."""
+    incident_fields = [
+        "Actions",
+        "AddlReqs",
+        "AdminSummary",
+        "Category",
+        "CategoryID",
+        "Context",
+        "CreateBy",
+        "CreateFirst",
+        "CreateLast",
+        "CreateTS_date",
+        "FamilyMeetingNotes",
+        "GradeLevelShort",
+        "HomeroomName",
+        "IncidentID",
+        "Infraction",
+        "InfractionTypeID",
+        "IsActive",
+        "IsReferral",
+        "IssueTS_date",
+        "Penalties",
+        "ReportedDetails",
+        "SchoolID",
+        "SendAlert",
+        "Status",
+        "StatusID",
+        "StudentID",
+        "StudentSchoolID",
+    ]
     df = json_normalize(incidents["data"])
     df.columns = df.columns.str.replace(".", "_")
     df = df[incident_fields]
