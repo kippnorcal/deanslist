@@ -147,7 +147,7 @@ def main():
 
         for school, api_key in school_key_map.items():
             logging.info(f"Getting data for {school}.")
-            incidents = API(api_key).get("incidents")
+            incidents = API("v1", api_key).get("incidents")
 
             delete_current_incidents(sql, api_key)
             count_incidents = insert_new_incidents(sql, incidents, api_key)
@@ -160,6 +160,16 @@ def main():
             delete_current_records(sql, api_key, "DeansList_Penalties", "IncidentID")
             count_penalties = insert_new_records(sql, incidents, "Penalties")
             total_penalties += count_penalties
+
+            # behaviors = API("beta", api_key).get("get-behavior-data")
+            # delete_records(sql, "DeansList_Behaviors", api_key)
+            # count_behaviors = insert_new_behaviors(sql, behaviors, api_key)
+            # total_behaviors += count_behaviors
+
+            # comms = API("beta", api_key).get("get-comm-data")
+            # delete_records(sql, "DeansList_Communications", api_key)
+            # count_comms = insert_new_comms(sql, comms, api_key)
+            # total_comms += count_comms
 
         logging.info(f"Updated {total_incidents} total records in DeansList_Raw.")
         logging.info(f"Updated {total_actions} total records in DeansList_Actions.")
