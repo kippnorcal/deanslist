@@ -217,11 +217,20 @@ def parse_json_data(json, api_key):
 
 
 def refresh_communications_data(sql, api_key):
-    """Refresh all communications data."""
+    """Refresh communications data."""
     comms = API("beta", api_key).get("get-comm-data")
     delete_matching_records(sql, "DeansList_Communications", api_key)
-    count_comms = insert_new_comms(sql, comms, api_key)
-    total_comms += count_comms
+    count_comms = insert_new_comunications(sql, comms, api_key)
+    return count_comms
+
+
+def insert_new_comunications(sql, comms, api_key):
+    """Insert records into the Communications table."""
+    df = parse_json_data(comms, api_key)
+    sql.insert_into("DeansList_Communications", df, if_exists="append")
+    count = len(df)
+    logging.info(f"Inserted {count} records into DeansList_Communications.")
+    return count
 
 
 def main():
@@ -234,27 +243,27 @@ def main():
         total_actions = 0
         total_penalties = 0
         total_behaviors = 0
-        # total_comms = 0
+        total_comms = 0
 
         for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
 
-            incidents, actions, penalties = refresh_incident_data(sql, api_key)
-            total_incidents += incidents
-            total_actions += actions
-            total_penalties += penalties
+            # incidents, actions, penalties = refresh_incident_data(sql, api_key)
+            # total_incidents += incidents
+            # total_actions += actions
+            # total_penalties += penalties
 
-            behaviors = refresh_behavior_data(sql, api_key)
-            total_behaviors += behaviors
+            # behaviors = refresh_behavior_data(sql, api_key)
+            # total_behaviors += behaviors
 
-            # comms = refresh_communications_data(sql, api_key)
-            # total_comms += comms
+            comms = refresh_communications_data(sql, api_key)
+            total_comms += comms
 
         logging.info(f"Updated {total_incidents} total records in DeansList_Incidents.")
         logging.info(f"Updated {total_actions} total records in DeansList_Actions.")
         logging.info(f"Updated {total_penalties} total records in DeansList_Penalties.")
         logging.info(f"Updated {total_behaviors} total records in DeansList_Behaviors.")
-        # logging.info(f"Updated {total_comms} total records in DeansList_Communications.")
+        logging.info(f"Updated {total_comms} total records in DeansList_Communications.")
 
         mailer.notify()
     except Exception as e:
