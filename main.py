@@ -102,6 +102,8 @@ def get_incidents_data(incidents, api_key):
         "IsActive",
         "IsReferral",
         "IssueTS_date",
+        "Location",
+        "LocationID",
         "Penalties",
         "ReportedDetails",
         "SchoolID",
@@ -248,13 +250,13 @@ def main():
         for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
 
-            # incidents, actions, penalties = refresh_incident_data(sql, api_key)
-            # total_incidents += incidents
-            # total_actions += actions
-            # total_penalties += penalties
+            incidents, actions, penalties = refresh_incident_data(sql, api_key)
+            total_incidents += incidents
+            total_actions += actions
+            total_penalties += penalties
 
-            # behaviors = refresh_behavior_data(sql, api_key)
-            # total_behaviors += behaviors
+            behaviors = refresh_behavior_data(sql, api_key)
+            total_behaviors += behaviors
 
             comms = refresh_communications_data(sql, api_key)
             total_comms += comms
