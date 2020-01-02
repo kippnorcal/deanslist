@@ -62,9 +62,16 @@ $ docker build -t deanslist .
 $ docker run --rm -it deanslist
 ```
 
-### For development or troubleshooting
+### Runtime parameters
 Run the job for only certain schools (one or many). School names must match APIKeys table.
 
 ```
 $ docker run --rm -it deanslist --schools "KIPP Bayview Academy" "KIPP Bridge Academy (Upper)"
+```
+
+By default, we get behaviors data for the current month. To get behavior data for a specified date range, 
+use the following command. Note: for best performance, limit the date range to 1 month.
+
+```
+$ docker run --rm -it deanslist --behavior-daterange "2019-12-01" "2019-12-31"
 ```
