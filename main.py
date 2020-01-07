@@ -13,7 +13,6 @@ from api import API
 from mailer import Mailer
 
 
-# This argparse is currently only useful for testing since the job does a truncate and reload.
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--schools",
