@@ -22,14 +22,14 @@ parser.add_argument(
     nargs="+",
 )
 parser.add_argument(
-    "--behavior-daterange",
-    help='Filter behavior data for the given date range. Recommended: 1 month max. Example: --behavior-daterange "2019-12-01" "2019-12-31"',
-    dest="behavior_daterange",
+    "--behavior-backfill",
+    help='Backfill behavior data only for the given date range. Recommended: 1 month max. Example: --behavior-backfill "2019-12-01" "2019-12-31"',
+    dest="behavior_backfill",
     nargs=2,
 )
 args = parser.parse_args()
 SCHOOLS = args.schools
-BEHAVIOR_DATERANGE = args.behavior_daterange
+BEHAVIOR_BACKFILL = args.behavior_backfill
 
 logging.basicConfig(
     filename="app.log",
@@ -163,9 +163,9 @@ def refresh_behavior_data(sql, api_key):
     If start & end date are passed in, then get refresh for this date range.
     """
     start_date = (
-        BEHAVIOR_DATERANGE[0] if BEHAVIOR_DATERANGE else get_current_month_start()
+        BEHAVIOR_BACKFILL[0] if BEHAVIOR_BACKFILL else get_current_month_start()
     )
-    end_date = BEHAVIOR_DATERANGE[1] if BEHAVIOR_DATERANGE else get_current_month_end()
+    end_date = BEHAVIOR_BACKFILL[1] if BEHAVIOR_BACKFILL else get_current_month_end()
     params = {"sdt": start_date, "edt": end_date}
     behaviors = API("beta", api_key).get("get-behavior-data", params)
     delete_behavior_records(sql, "DeansList_Behaviors", start_date, end_date, api_key)
@@ -244,28 +244,29 @@ def main():
         total_incidents = 0
         total_actions = 0
         total_penalties = 0
-        total_behaviors = 0
         total_comms = 0
+        total_behaviors = 0
 
         for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
 
-            incidents, actions, penalties = refresh_incident_data(sql, api_key)
-            total_incidents += incidents
-            total_actions += actions
-            total_penalties += penalties
+            if not BEHAVIOR_BACKFILL:
+                incidents, actions, penalties = refresh_incident_data(sql, api_key)
+                total_incidents += incidents
+                total_actions += actions
+                total_penalties += penalties
+
+                comms = refresh_communications_data(sql, api_key)
+                total_comms += comms
 
             behaviors = refresh_behavior_data(sql, api_key)
             total_behaviors += behaviors
 
-            comms = refresh_communications_data(sql, api_key)
-            total_comms += comms
-
         logging.info(f"Updated {total_incidents} total records in DeansList_Incidents.")
         logging.info(f"Updated {total_actions} total records in DeansList_Actions.")
         logging.info(f"Updated {total_penalties} total records in DeansList_Penalties.")
-        logging.info(f"Updated {total_behaviors} total records in DeansList_Behaviors.")
         logging.info(f"Updated {total_comms} total records in DeansList_Communications.")
+        logging.info(f"Updated {total_behaviors} total records in DeansList_Behaviors.")
 
         mailer.notify()
     except Exception as e:
