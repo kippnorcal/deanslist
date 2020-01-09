@@ -1,5 +1,6 @@
 import argparse
 import calendar
+from collections import Counter
 import datetime
 import logging
 import sys
@@ -247,38 +248,30 @@ def main():
         sql = MSSQL()
         school_apikey_map = get_schools_and_apikeys(sql)
 
-        total_incidents = 0
-        total_actions = 0
-        total_penalties = 0
-        total_comms = 0
-        total_behaviors = 0
-
+        objects = ["Incidents", "Actions", "Penalties", "Communications", "Behaviors"]
+        counter = Counter({obj: 0 for obj in objects})
+        
         for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
 
             if not BEHAVIOR_BACKFILL:
                 incidents, count = refresh_incident_data(sql, api_key)
-                total_incidents += count
+                counter.update({"Incidents": count})
 
                 count = refresh_actions_data(sql, api_key, incidents)
-                total_actions += count
+                counter.update({"Actions": count})
 
                 count = refresh_penalties_data(sql, api_key, incidents)
-                total_penalties += count
+                counter.update({"Penalties": count})
 
                 count = refresh_communications_data(sql, api_key)
-                total_comms += count
+                counter.update({"Communications": count})
 
             count = refresh_behavior_data(sql, api_key)
-            total_behaviors += count
+            counter.update({"Behaviors": count})
 
-        logging.info(f"Updated {total_incidents} total records in DeansList_Incidents.")
-        logging.info(f"Updated {total_actions} total records in DeansList_Actions.")
-        logging.info(f"Updated {total_penalties} total records in DeansList_Penalties.")
-        logging.info(
-            f"Updated {total_comms} total records in DeansList_Communications."
-        )
-        logging.info(f"Updated {total_behaviors} total records in DeansList_Behaviors.")
+        for obj, count in counter.items():
+            logging.info(f"Total {obj}: {count}")
 
         mailer.notify()
     except Exception as e:
