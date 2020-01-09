@@ -52,15 +52,25 @@ def get_schools_and_apikeys(sql):
 
 
 def refresh_incident_data(sql, api_key):
-    """Refresh all incident, actions, and penalties data."""
+    """Get incidents from the API and refresh all incidents data."""
     incidents = API("v1", api_key).get("incidents")
     delete_matching_records(sql, "DeansList_Incidents", api_key)
-    count_incidents = insert_new_incidents(sql, incidents, api_key)
+    count = insert_new_incidents(sql, incidents, api_key)
+    return incidents, count
+
+
+def refresh_actions_data(sql, api_key, incidents):
+    """Refresh all actions data using incidents raw data."""
     delete_current_nested_records(sql, api_key, "DeansList_Actions", "SourceID")
-    count_actions = insert_new_nested_records(sql, incidents, "Actions")
+    count = insert_new_nested_records(sql, incidents, "Actions")
+    return count
+
+
+def refresh_penalties_data(sql, api_key, incidents):
+    """Refresh all penalties data using incidents raw data."""
     delete_current_nested_records(sql, api_key, "DeansList_Penalties", "IncidentID")
-    count_penalties = insert_new_nested_records(sql, incidents, "Penalties")
-    return count_incidents, count_actions, count_penalties
+    count = insert_new_nested_records(sql, incidents, "Penalties")
+    return count
 
 
 def delete_matching_records(sql, table_name, api_key):
@@ -185,19 +195,16 @@ def delete_behavior_records(sql, table_name, start_date, end_date, api_key):
 
 def get_current_month_start():
     """Get the first day of the current month."""
-    today = datetime.date.today()
-    first_of_month = datetime.date(today.year, today.month, 1)
-    date_str = first_of_month.strftime("%Y-%m-%d")
-    return date_str
+    date = datetime.date.today().replace(day=1).strftime("%Y-%m-%d")
+    return date
 
 
 def get_current_month_end():
     """Get the last day of the current month."""
     today = datetime.date.today()
     month_length = calendar.monthrange(today.year, today.month)[1]
-    last_of_month = datetime.date(today.year, today.month, month_length)
-    date_str = last_of_month.strftime("%Y-%m-%d")
-    return date_str
+    date = today.replace(day=month_length).strftime("%Y-%m-%d")
+    return date
 
 
 def insert_new_behaviors(sql, behaviors, api_key):
@@ -250,21 +257,27 @@ def main():
             logging.info(f"Getting data for {school}.")
 
             if not BEHAVIOR_BACKFILL:
-                incidents, actions, penalties = refresh_incident_data(sql, api_key)
-                total_incidents += incidents
-                total_actions += actions
-                total_penalties += penalties
+                incidents, count = refresh_incident_data(sql, api_key)
+                total_incidents += count
 
-                comms = refresh_communications_data(sql, api_key)
-                total_comms += comms
+                count = refresh_actions_data(sql, api_key, incidents)
+                total_actions += count
 
-            behaviors = refresh_behavior_data(sql, api_key)
-            total_behaviors += behaviors
+                count = refresh_penalties_data(sql, api_key, incidents)
+                total_penalties += count
+
+                count = refresh_communications_data(sql, api_key)
+                total_comms += count
+
+            count = refresh_behavior_data(sql, api_key)
+            total_behaviors += count
 
         logging.info(f"Updated {total_incidents} total records in DeansList_Incidents.")
         logging.info(f"Updated {total_actions} total records in DeansList_Actions.")
         logging.info(f"Updated {total_penalties} total records in DeansList_Penalties.")
-        logging.info(f"Updated {total_comms} total records in DeansList_Communications.")
+        logging.info(
+            f"Updated {total_comms} total records in DeansList_Communications."
+        )
         logging.info(f"Updated {total_behaviors} total records in DeansList_Behaviors.")
 
         mailer.notify()
