@@ -42,6 +42,12 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
+def count_and_log(df, entity):
+    count = len(df)
+    logging.info(f"--Inserted {count} {entity} records.")
+    return count
+
+
 def get_schools_and_apikeys(sql):
     """Retrieve schools and API keys from the data warehouse."""
     df = sql.query(f"SELECT * FROM custom.DeansList_APIConnection")
@@ -85,8 +91,7 @@ def insert_new_incidents(sql, incidents, api_key):
     """Insert records into the Incidents table."""
     df = get_incidents_data(incidents, api_key)
     sql.insert_into("DeansList_Incidents", df, if_exists="append")
-    count = len(df)
-    logging.info(f"Inserted {count} records into DeansList_Incidents.")
+    count = count_and_log(df, "Incidents")
     return count
 
 
@@ -151,8 +156,7 @@ def insert_new_nested_records(sql, incidents, record_type):
     """Insert records into the table by the record_type (Actions or Penalties)."""
     df = get_nested_column_data(incidents, record_type)
     sql.insert_into(f"DeansList_{record_type}", df, if_exists="append")
-    count = len(df)
-    logging.info(f"Inserted {count} records into DeansList_{record_type}.")
+    count = count_and_log(df, record_type)
     return count
 
 
@@ -212,8 +216,7 @@ def insert_new_behaviors(sql, behaviors, api_key):
     """Insert records into the Behaviors table."""
     df = parse_json_data(behaviors, api_key)
     sql.insert_into("DeansList_Behaviors", df, if_exists="append")
-    count = len(df)
-    logging.info(f"Inserted {count} records into DeansList_Behaviors.")
+    count = count_and_log(df, "Behaviors")
     return count
 
 
@@ -237,8 +240,7 @@ def insert_new_comunications(sql, comms, api_key):
     """Insert records into the Communications table."""
     df = parse_json_data(comms, api_key)
     sql.insert_into("DeansList_Communications", df, if_exists="append")
-    count = len(df)
-    logging.info(f"Inserted {count} records into DeansList_Communications.")
+    count = count_and_log(df, "Communications")
     return count
 
 
@@ -250,7 +252,7 @@ def main():
 
         objects = ["Incidents", "Actions", "Penalties", "Communications", "Behaviors"]
         counter = Counter({obj: 0 for obj in objects})
-        
+
         for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
 
