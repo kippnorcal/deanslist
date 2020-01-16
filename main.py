@@ -74,11 +74,10 @@ def main():
         counter = Counter({obj: 0 for obj in objects})
         start = BEHAVIOR_BACKFILL[0] if BEHAVIOR_BACKFILL else get_current_month_start()
         end = BEHAVIOR_BACKFILL[1] if BEHAVIOR_BACKFILL else get_current_month_end()
-        params = {"sdt": start, "edt": end}
 
         for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
-            school = School(api_key, sql, counter)
+            school = School(api_key, sql, counter, start, end)
             if not BEHAVIOR_BACKFILL:
                 # Incidents
                 incidents = school.get_data_from_api("v1", "incidents")
@@ -91,15 +90,8 @@ def main():
                 comms = school.get_data_from_api("beta", "get-comm-data")
                 school.refresh_data(comms, "Communications", comms_columns)
             # Behaviors
-            behaviors = school.get_data_from_api("beta", "get-behavior-data", params)
-            school.refresh_data(
-                behaviors,
-                "Behaviors",
-                behaviors_columns,
-                date_column="BehaviorDate",
-                start=start,
-                end=end,
-            )
+            behaviors = school.get_data_from_api("beta", "get-behavior-data")
+            school.refresh_data(behaviors, "Behaviors", behaviors_columns)
             counter = school.counter
 
         for obj, count in counter.items():

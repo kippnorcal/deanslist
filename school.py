@@ -9,27 +9,33 @@ from api import API
 class School:
     """School object which executes the updates for each data table."""
 
-    def __init__(self, api_key, sql, counter):
+    def __init__(self, api_key, sql, counter, start_date, end_date):
         self.api_key = api_key
         self.sql = sql
         self.counter = counter
+        self.start_date = start_date
+        self.end_date = end_date
 
-    def get_data_from_api(self, version, endpoint, params=None):
-        """API get request and return the json response."""
+    def get_data_from_api(self, version, endpoint):
+        """API get request and return the json response.
+        
+        Only the behavior endpoint takes start/end date params."""
+        params = None
+        if endpoint == "get-behavior-data":
+            params = {"sdt": self.start_date, "edt": self.end_date}
         json_response = API(version, self.api_key).get(endpoint, params)
         return json_response
 
-    def _delete_current_records(self, entity, date_column=None, start=None, end=None):
+    def _delete_current_records(self, entity):
         """Delete table rows that match the given API key."""
         table = self.sql.table(f"DeansList_{entity}")
-        if not date_column:
+        if entity != "Behaviors":
             d = table.delete().where(table.c.SchoolAPIKey == self.api_key)
         else:
-            # Only for Behaviors
             d = table.delete().where(
                 (table.c.SchoolAPIKey == self.api_key)
-                & (table.c[date_column] >= start)
-                & (table.c[date_column] <= end)
+                & (table.c["BehaviorDate"] >= self.start_date)
+                & (table.c["BehaviorDate"] <= self.end_date)
             )
         self.sql.engine.execute(d)
 
@@ -57,15 +63,9 @@ class School:
         count = self._count_and_log(df, entity)
         return count
 
-    def refresh_data(
-        self, json, entity, columns, date_column=None, start=None, end=None
-    ):
-        """Truncate and reload the data in the database table for this school.
-        
-        date_column, start, and end are used only by Behavior endpoint."""
-        self._delete_current_records(
-            entity, date_column=date_column, start=start, end=end,
-        )
+    def refresh_data(self, json, entity, columns):
+        """Truncate and reload the data in the database table for this school."""
+        self._delete_current_records(entity)
         df = self._parse_json_data(json, columns)
         count = self._insert_df_into_table(entity, df)
         self.counter.update({entity: count})
