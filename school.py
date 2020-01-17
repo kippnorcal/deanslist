@@ -73,13 +73,15 @@ class School:
     def _delete_current_nested_records(self, entity, incident_column):
         """Delete records for the given table (Actions or Penalties) 
         that have a corresponding incident in the Incidents table. """
-        incident_ids = self.sql.query(
-            f"""SELECT DISTINCT t.{incident_column}
+        query = f"""
+            SELECT DISTINCT t.{incident_column}
             FROM custom.DeansList_{entity} t
             LEFT JOIN custom.DeansList_Incidents r
-                ON r.IncidentID = t.{incident_column}
-            WHERE r.SchoolAPIKey='{self.api_key}'"""
-        )
+                ON r.IncidentID = ?
+            WHERE r.SchoolAPIKey = ?
+        """
+        params = [f"t.{incident_column}", f"'{self.api_key}'"]
+        incident_ids = self.sql.query(query, params=params)
         incident_ids = incident_ids[incident_column].tolist()
         table = self.sql.table(f"DeansList_{entity}")
         for incident_id in incident_ids:
