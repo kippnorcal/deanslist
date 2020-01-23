@@ -6,12 +6,11 @@ import logging
 import sys
 import traceback
 
-import pandas as pd
-from pandas.io.json import json_normalize
 from sqlsorcery import MSSQL
 
-from api import API
+from datamap import incidents_columns, comms_columns, behaviors_columns
 from mailer import Mailer
+from school import School
 
 
 parser = argparse.ArgumentParser()
@@ -42,12 +41,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def count_and_log(df, entity):
-    count = len(df)
-    logging.info(f"--Inserted {count} {entity} records.")
-    return count
-
-
 def get_schools_and_apikeys(sql):
     """Retrieve schools and API keys from the data warehouse."""
     df = sql.query(f"SELECT * FROM custom.DeansList_APIConnection")
@@ -56,146 +49,6 @@ def get_schools_and_apikeys(sql):
     if SCHOOLS:
         school_key_map = {school: school_key_map[school] for school in SCHOOLS}
     return school_key_map
-
-
-def refresh_incident_data(sql, api_key):
-    """Get incidents from the API and refresh all incidents data."""
-    incidents = API("v1", api_key).get("incidents")
-    delete_matching_records(sql, "DeansList_Incidents", api_key)
-    count = insert_new_incidents(sql, incidents, api_key)
-    return incidents, count
-
-
-def refresh_actions_data(sql, api_key, incidents):
-    """Refresh all actions data using incidents raw data."""
-    delete_current_nested_records(sql, api_key, "DeansList_Actions", "SourceID")
-    count = insert_new_nested_records(sql, incidents, "Actions")
-    return count
-
-
-def refresh_penalties_data(sql, api_key, incidents):
-    """Refresh all penalties data using incidents raw data."""
-    delete_current_nested_records(sql, api_key, "DeansList_Penalties", "IncidentID")
-    count = insert_new_nested_records(sql, incidents, "Penalties")
-    return count
-
-
-def delete_matching_records(sql, table_name, api_key):
-    """Delete table rows that match the given API key."""
-    table = sql.table(table_name)
-    d = table.delete().where(table.c.SchoolAPIKey == api_key)
-    sql.engine.execute(d)
-
-
-def insert_new_incidents(sql, incidents, api_key):
-    """Insert records into the Incidents table."""
-    df = get_incidents_data(incidents, api_key)
-    sql.insert_into("DeansList_Incidents", df, if_exists="append")
-    count = count_and_log(df, "Incidents")
-    return count
-
-
-def get_incidents_data(incidents, api_key):
-    """Get the incidents data and add additional columns."""
-    incident_fields = [
-        "Actions",
-        "AddlReqs",
-        "AdminSummary",
-        "Category",
-        "CategoryID",
-        "Context",
-        "CreateBy",
-        "CreateFirst",
-        "CreateLast",
-        "CreateTS_date",
-        "FamilyMeetingNotes",
-        "GradeLevelShort",
-        "HomeroomName",
-        "IncidentID",
-        "Infraction",
-        "InfractionTypeID",
-        "IsActive",
-        "IsReferral",
-        "IssueTS_date",
-        "Location",
-        "LocationID",
-        "Penalties",
-        "ReportedDetails",
-        "SchoolID",
-        "SendAlert",
-        "Status",
-        "StatusID",
-        "StudentID",
-        "StudentSchoolID",
-    ]
-    df = json_normalize(incidents["data"])
-    df.columns = df.columns.str.replace(".", "_")
-    df = df[incident_fields]
-    df["SchoolAPIKey"] = api_key
-    df = df.astype({"Actions": str, "Penalties": str})
-    return df
-
-
-def delete_current_nested_records(sql, api_key, table_name, incident_column):
-    """Delete records for the given table (Actions or Penalties) that have a corresponding incident in the Incidents table."""
-    incident_ids = sql.query(
-        f"""SELECT DISTINCT t.{incident_column}
-        FROM custom.{table_name} t
-        LEFT JOIN custom.DeansList_Incidents r
-            ON r.IncidentID = t.{incident_column}
-        WHERE r.SchoolAPIKey='{api_key}'"""
-    )
-    incident_ids = incident_ids[incident_column].tolist()
-    table = sql.table(table_name)
-    for incident_id in incident_ids:
-        d = table.delete().where(table.c[incident_column] == incident_id)
-        sql.engine.execute(d)
-
-
-def insert_new_nested_records(sql, incidents, record_type):
-    """Insert records into the table by the record_type (Actions or Penalties)."""
-    df = get_nested_column_data(incidents, record_type)
-    sql.insert_into(f"DeansList_{record_type}", df, if_exists="append")
-    count = count_and_log(df, record_type)
-    return count
-
-
-def get_nested_column_data(incidents, column):
-    """Get column data that is stored as a list of JSON objects."""
-    data = []
-    for record in incidents["data"]:
-        if record[column]:
-            data.extend(record[column])
-    df = pd.DataFrame(data)
-    return df
-
-
-def refresh_behavior_data(sql, api_key):
-    """Refresh behavior data for the current month.
-    
-    We limit to one month by default because the behaviors data is relatively large.
-    If start & end date are passed in, then get refresh for this date range.
-    """
-    start_date = (
-        BEHAVIOR_BACKFILL[0] if BEHAVIOR_BACKFILL else get_current_month_start()
-    )
-    end_date = BEHAVIOR_BACKFILL[1] if BEHAVIOR_BACKFILL else get_current_month_end()
-    params = {"sdt": start_date, "edt": end_date}
-    behaviors = API("beta", api_key).get("get-behavior-data", params)
-    delete_behavior_records(sql, "DeansList_Behaviors", start_date, end_date, api_key)
-    count_behaviors = insert_new_behaviors(sql, behaviors, api_key)
-    return count_behaviors
-
-
-def delete_behavior_records(sql, table_name, start_date, end_date, api_key):
-    """Delete behavior table rows that match the date range and given API key."""
-    table = sql.table(table_name)
-    d = table.delete().where(
-        (table.c.SchoolAPIKey == api_key)
-        & (table.c.BehaviorDate >= start_date)
-        & (table.c.BehaviorDate <= end_date)
-    )
-    sql.engine.execute(d)
 
 
 def get_current_month_start():
@@ -212,65 +65,34 @@ def get_current_month_end():
     return date
 
 
-def insert_new_behaviors(sql, behaviors, api_key):
-    """Insert records into the Behaviors table."""
-    df = parse_json_data(behaviors, api_key)
-    sql.insert_into("DeansList_Behaviors", df, if_exists="append")
-    count = count_and_log(df, "Behaviors")
-    return count
-
-
-def parse_json_data(json, api_key):
-    """Get the behavior data and add additional columns."""
-    df = json_normalize(json["data"])
-    df.columns = df.columns.str.replace(".", "_")
-    df["SchoolAPIKey"] = api_key
-    return df
-
-
-def refresh_communications_data(sql, api_key):
-    """Refresh communications data."""
-    comms = API("beta", api_key).get("get-comm-data")
-    delete_matching_records(sql, "DeansList_Communications", api_key)
-    count_comms = insert_new_comunications(sql, comms, api_key)
-    return count_comms
-
-
-def insert_new_comunications(sql, comms, api_key):
-    """Insert records into the Communications table."""
-    df = parse_json_data(comms, api_key)
-    sql.insert_into("DeansList_Communications", df, if_exists="append")
-    count = count_and_log(df, "Communications")
-    return count
-
-
 def main():
     try:
         mailer = Mailer()
         sql = MSSQL()
         school_apikey_map = get_schools_and_apikeys(sql)
-
         objects = ["Incidents", "Actions", "Penalties", "Communications", "Behaviors"]
         counter = Counter({obj: 0 for obj in objects})
+        start = BEHAVIOR_BACKFILL[0] if BEHAVIOR_BACKFILL else get_current_month_start()
+        end = BEHAVIOR_BACKFILL[1] if BEHAVIOR_BACKFILL else get_current_month_end()
 
         for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
-
+            school = School(api_key, sql, counter, start, end)
             if not BEHAVIOR_BACKFILL:
-                incidents, count = refresh_incident_data(sql, api_key)
-                counter.update({"Incidents": count})
-
-                count = refresh_actions_data(sql, api_key, incidents)
-                counter.update({"Actions": count})
-
-                count = refresh_penalties_data(sql, api_key, incidents)
-                counter.update({"Penalties": count})
-
-                count = refresh_communications_data(sql, api_key)
-                counter.update({"Communications": count})
-
-            count = refresh_behavior_data(sql, api_key)
-            counter.update({"Behaviors": count})
+                # Incidents
+                incidents = school.get_data_from_api("v1", "incidents")
+                school.refresh_data(incidents, "Incidents", incidents_columns)
+                # Actions
+                school.refresh_nested_table_data(incidents, "Actions", "SourceID")
+                # Penalties
+                school.refresh_nested_table_data(incidents, "Penalties", "IncidentID")
+                # Comms
+                comms = school.get_data_from_api("beta", "get-comm-data")
+                school.refresh_data(comms, "Communications", comms_columns)
+            # Behaviors
+            behaviors = school.get_data_from_api("beta", "get-behavior-data")
+            school.refresh_data(behaviors, "Behaviors", behaviors_columns)
+            counter = school.counter
 
         for obj, count in counter.items():
             logging.info(f"Total {obj}: {count}")
