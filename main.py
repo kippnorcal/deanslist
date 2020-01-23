@@ -1,17 +1,18 @@
 import argparse
+import calendar
+from collections import Counter
+import datetime
 import logging
 import sys
 import traceback
 
-import pandas as pd
-from pandas.io.json import json_normalize
 from sqlsorcery import MSSQL
 
-from api import API
+from datamap import incidents_columns, comms_columns, behaviors_columns
 from mailer import Mailer
+from school import School
 
 
-# This argparse is currently only useful for testing since the job does a truncate and reload.
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--schools",
@@ -19,9 +20,15 @@ parser.add_argument(
     dest="schools",
     nargs="+",
 )
+parser.add_argument(
+    "--behavior-backfill",
+    help='Backfill behavior data only for the given date range. Recommended: 1 month max. Example: --behavior-backfill "2019-12-01" "2019-12-31"',
+    dest="behavior_backfill",
+    nargs=2,
+)
 args = parser.parse_args()
 SCHOOLS = args.schools
-
+BEHAVIOR_BACKFILL = args.behavior_backfill
 
 logging.basicConfig(
     filename="app.log",
@@ -34,7 +41,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def get_schools_and_keys(sql):
+def get_schools_and_apikeys(sql):
     """Retrieve schools and API keys from the data warehouse."""
     df = sql.query(f"SELECT * FROM custom.DeansList_APIConnection")
     df = df[df["Active"] == True]
@@ -44,126 +51,51 @@ def get_schools_and_keys(sql):
     return school_key_map
 
 
-def get_raw_incidents_data(incidents, api_key):
-    """Get the raw data and add additional columns."""
-    incident_fields = [
-        "Actions",
-        "AddlReqs",
-        "AdminSummary",
-        "Category",
-        "CategoryID",
-        "Context",
-        "CreateBy",
-        "CreateFirst",
-        "CreateLast",
-        "CreateTS_date",
-        "FamilyMeetingNotes",
-        "GradeLevelShort",
-        "HomeroomName",
-        "IncidentID",
-        "Infraction",
-        "InfractionTypeID",
-        "IsActive",
-        "IsReferral",
-        "IssueTS_date",
-        "Penalties",
-        "ReportedDetails",
-        "SchoolID",
-        "SendAlert",
-        "Status",
-        "StatusID",
-        "StudentID",
-        "StudentSchoolID",
-    ]
-    df = json_normalize(incidents["data"])
-    df.columns = df.columns.str.replace(".", "_")
-    df = df[incident_fields]
-    df["SchoolAPIKey"] = api_key
-    df = df.astype({"Actions": str, "Penalties": str})
-    logging.info(f"Retrieved {len(df)} Incident records.")
-    return df
+def get_current_month_start():
+    """Get the first day of the current month."""
+    date = datetime.date.today().replace(day=1).strftime("%Y-%m-%d")
+    return date
 
 
-def delete_current_incidents(sql, api_key):
-    table = sql.table("DeansList_Raw")
-    d = table.delete().where(table.c.SchoolAPIKey == api_key)
-    sql.engine.execute(d)
-
-
-def insert_new_incidents(sql, incidents, api_key):
-    """Insert records into the Raw Incidents table."""
-    df = get_raw_incidents_data(incidents, api_key)
-    sql.insert_into("DeansList_Raw", df, if_exists="append")
-    count = len(df)
-    logging.info(f"Inserted {count} records into DeansList_Raw.")
-    return count
-
-
-def delete_current_records(sql, api_key, table_name, incident_column):
-    """Delete records for the given table (Actions or Penalties) that have a corresponding incident in the Raw table."""
-    incident_ids = sql.query(
-        f"""SELECT DISTINCT t.{incident_column}
-        FROM custom.{table_name} t
-        LEFT JOIN custom.DeansList_Raw r
-            ON r.IncidentID = t.{incident_column}
-        WHERE r.SchoolAPIKey='{api_key}'"""
-    )
-    incident_ids = incident_ids[incident_column].tolist()
-    table = sql.table(table_name)
-    for incident_id in incident_ids:
-        d = table.delete().where(table.c[incident_column] == incident_id)
-        sql.engine.execute(d)
-
-
-def insert_new_records(sql, incidents, record_type):
-    """Insert records into the table by the record_type (Actions or Penalties)."""
-    df = get_nested_column_data(incidents, record_type)
-    sql.insert_into(f"DeansList_{record_type}", df, if_exists="append")
-    count = len(df)
-    logging.info(f"Inserted {count} records into DeansList_{record_type}.")
-    return count
-
-
-def get_nested_column_data(incidents, column):
-    """Get column data that is stored as a list of JSON objects."""
-    data = []
-    for record in incidents["data"]:
-        if record[column]:
-            data.extend(record[column])
-    df = pd.DataFrame(data)
-    logging.info(f"Retrieved {len(df)} {column} records.")
-    return df
+def get_current_month_end():
+    """Get the last day of the current month."""
+    today = datetime.date.today()
+    month_length = calendar.monthrange(today.year, today.month)[1]
+    date = today.replace(day=month_length).strftime("%Y-%m-%d")
+    return date
 
 
 def main():
     try:
         mailer = Mailer()
         sql = MSSQL()
-        school_key_map = get_schools_and_keys(sql)
+        school_apikey_map = get_schools_and_apikeys(sql)
+        objects = ["Incidents", "Actions", "Penalties", "Communications", "Behaviors"]
+        counter = Counter({obj: 0 for obj in objects})
+        start = BEHAVIOR_BACKFILL[0] if BEHAVIOR_BACKFILL else get_current_month_start()
+        end = BEHAVIOR_BACKFILL[1] if BEHAVIOR_BACKFILL else get_current_month_end()
 
-        total_incidents = 0
-        total_actions = 0
-        total_penalties = 0
-
-        for school, api_key in school_key_map.items():
+        for school, api_key in school_apikey_map.items():
             logging.info(f"Getting data for {school}.")
-            incidents = API(api_key).get("incidents")
+            school = School(api_key, sql, counter, start, end)
+            if not BEHAVIOR_BACKFILL:
+                # Incidents
+                incidents = school.get_data_from_api("v1", "incidents")
+                school.refresh_data(incidents, "Incidents", incidents_columns)
+                # Actions
+                school.refresh_nested_table_data(incidents, "Actions", "SourceID")
+                # Penalties
+                school.refresh_nested_table_data(incidents, "Penalties", "IncidentID")
+                # Comms
+                comms = school.get_data_from_api("beta", "get-comm-data")
+                school.refresh_data(comms, "Communications", comms_columns)
+            # Behaviors
+            behaviors = school.get_data_from_api("beta", "get-behavior-data")
+            school.refresh_data(behaviors, "Behaviors", behaviors_columns)
+            counter = school.counter
 
-            delete_current_incidents(sql, api_key)
-            count_incidents = insert_new_incidents(sql, incidents, api_key)
-            total_incidents += count_incidents
-
-            delete_current_records(sql, api_key, "DeansList_Actions", "SourceID")
-            count_actions = insert_new_records(sql, incidents, "Actions")
-            total_actions += count_actions
-
-            delete_current_records(sql, api_key, "DeansList_Penalties", "IncidentID")
-            count_penalties = insert_new_records(sql, incidents, "Penalties")
-            total_penalties += count_penalties
-
-        logging.info(f"Updated {total_incidents} total records in DeansList_Raw.")
-        logging.info(f"Updated {total_actions} total records in DeansList_Actions.")
-        logging.info(f"Updated {total_penalties} total records in DeansList_Penalties.")
+        for obj, count in counter.items():
+            logging.info(f"Total {obj}: {count}")
 
         mailer.notify()
     except Exception as e:
