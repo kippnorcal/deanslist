@@ -39,6 +39,8 @@ comms_columns = [
     "SecondaryStudentID",
     "DLUserID",
     "UserSchoolID",
+    "UserFirstName",
+    "UserLastName",
     "CommWith",
     "CallType",
     "CallStatus",
