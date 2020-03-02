@@ -1,6 +1,6 @@
 import logging
 
-from pandas.io.json import json_normalize
+from pandas import json_normalize
 import pandas as pd
 
 from api import API
