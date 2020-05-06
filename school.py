@@ -59,7 +59,7 @@ class School:
 
     def _insert_df_into_table(self, entity, df):
         """Insert data into the corresponding data warehouse table."""
-        self.sql.insert_into(f"DeansList_{entity}", df, if_exists="append")
+        self.sql.insert_into(f"DeansList_{entity}", df, if_exists="append", chunksize=10000)
         count = self._count_and_log(df, entity)
         return count
 
