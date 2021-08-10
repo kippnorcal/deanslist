@@ -66,43 +66,41 @@ def get_current_month_end():
 
 
 def main():
-    try:
-        mailer = Mailer()
-        sql = MSSQL()
-        school_apikey_map = get_schools_and_apikeys(sql)
-        objects = ["Incidents", "Actions", "Penalties", "Communications", "Behaviors"]
-        counter = Counter({obj: 0 for obj in objects})
-        start = BEHAVIOR_BACKFILL[0] if BEHAVIOR_BACKFILL else get_current_month_start()
-        end = BEHAVIOR_BACKFILL[1] if BEHAVIOR_BACKFILL else get_current_month_end()
+    sql = MSSQL()
+    school_apikey_map = get_schools_and_apikeys(sql)
+    objects = ["Incidents", "Actions", "Penalties", "Communications", "Behaviors"]
+    counter = Counter({obj: 0 for obj in objects})
+    start = BEHAVIOR_BACKFILL[0] if BEHAVIOR_BACKFILL else get_current_month_start()
+    end = BEHAVIOR_BACKFILL[1] if BEHAVIOR_BACKFILL else get_current_month_end()
 
-        for school, api_key in school_apikey_map.items():
-            logging.info(f"Getting data for {school}.")
-            school = School(api_key, sql, counter, start, end)
-            if not BEHAVIOR_BACKFILL:
-                # Incidents
-                incidents = school.get_data_from_api("v1", "incidents")
-                school.refresh_data(incidents, "Incidents", incidents_columns)
-                # Actions
-                school.refresh_nested_table_data(incidents, "Actions", "SourceID")
-                # Penalties
-                school.refresh_nested_table_data(incidents, "Penalties", "IncidentID")
-                # Comms
-                comms = school.get_data_from_api("beta", "get-comm-data")
-                school.refresh_data(comms, "Communications", comms_columns)
-            # Behaviors
-            behaviors = school.get_data_from_api("beta", "get-behavior-data")
-            school.refresh_data(behaviors, "Behaviors", behaviors_columns)
-            counter = school.counter
+    for school, api_key in school_apikey_map.items():
+        logging.info(f"Getting data for {school}.")
+        school = School(api_key, sql, counter, start, end)
+        if not BEHAVIOR_BACKFILL:
+            # Incidents
+            incidents = school.get_data_from_api("v1", "incidents")
+            school.refresh_data(incidents, "Incidents", incidents_columns)
+            # Actions
+            school.refresh_nested_table_data(incidents, "Actions", "SourceID")
+            # Penalties
+            school.refresh_nested_table_data(incidents, "Penalties", "IncidentID")
+            # Comms
+            comms = school.get_data_from_api("beta", "get-comm-data")
+            school.refresh_data(comms, "Communications", comms_columns)
+        # Behaviors
+        behaviors = school.get_data_from_api("beta", "get-behavior-data")
+        school.refresh_data(behaviors, "Behaviors", behaviors_columns)
+        counter = school.counter
 
-        for obj, count in counter.items():
-            logging.info(f"Total {obj}: {count}")
-
-        mailer.notify()
-    except Exception as e:
-        stack_trace = traceback.format_exc()
-        logging.error(stack_trace)
-        mailer.notify(success=False)
+    for obj, count in counter.items():
+        logging.info(f"Total {obj}: {count}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+        error_message = None
+    except Exception as e:
+        logging.exception(e)
+        error_message = traceback.format_exc()
+    Mailer("DeansList").notify(error_message=error_message)
