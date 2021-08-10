@@ -1,9 +1,9 @@
-# deanslist_connector
-ETL job to bring Deanslist data into the data warehouse
+# deanslist
+ETL job to bring DeansList data into the data warehouse
 
 ## Dependencies:
 
-* Python3.7
+* Python3.8
 * [Pipenv](https://pipenv.readthedocs.io/en/latest/)
 * [Docker](https://www.docker.com/)
 
@@ -14,7 +14,7 @@ ETL job to bring Deanslist data into the data warehouse
 1. Clone this repo
 
 ```
-$ git clone https://github.com/kipp-bayarea/deanslist_connector.git
+$ git clone https://github.com/kippnorcal/deanslist.git
 ```
 
 2. Install Pipenv
@@ -39,9 +39,12 @@ DB_USER=
 DB_PWD=
 DB_SCHEMA=
 
-GMAIL_USER=
-GMAIL_PWD=
-SLACK_EMAIL=
+# Mailgun & email notification variables
+MG_API_KEY=
+MG_API_URL=
+MG_DOMAIN=
+SENDER_EMAIL=
+RECIPIENT_EMAIL=
 
 DOMAIN=deanslist domain
 ```
