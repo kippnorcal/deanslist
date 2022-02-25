@@ -79,3 +79,9 @@ use the following command. Note: for best performance, limit the date range to 1
 ```
 $ docker run --rm -it deanslist --behavior-backfill "2019-12-01" "2019-12-31"
 ```
+
+## Maintenance
+
+* If a new school starts using DeansList, then the table custom.DeansList_APIConnection needs to be updated. Set Active=True to pull records for the newly added school.
+* The connector can be turned off when school is out of session for the summer.
+* No other annual maintenance is required.
